@@ -88,7 +88,9 @@ final class DisruptorMessageQueue implements MessageQueue, DisruptorMessageQueue
                         break;
                     }
                     Thread.yield();
-                } catch (AlertException | InterruptedException ignored) {
+                } catch (AlertException ignored) {
+                    interrupted = true;
+                } catch (InterruptedException ignored) {
                     interrupted = true;
                 } catch (TimeoutException ignored) {
                 }
