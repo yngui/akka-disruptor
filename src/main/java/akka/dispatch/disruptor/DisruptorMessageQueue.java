@@ -70,11 +70,34 @@ final class DisruptorMessageQueue implements MessageQueue, DisruptorMessageQueue
 
     @Override
     public Envelope dequeue() {
+        fill();
+        int h = head & mask;
+        head++;
+        Envelope handle = buffer[h];
+        buffer[h] = null;
+        return handle;
+    }
+
+    @Override
+    public int numberOfMessages() {
+        return 0;
+    }
+
+    @Override
+    public boolean hasMessages() {
+        return head != tail || sequence.get() < sequenceBarrier.getCursor();
+    }
+
+    @Override
+    public void cleanUp(ActorRef owner, MessageQueue deadLetters) {
+        while (hasMessages()) {
+            deadLetters.enqueue(owner, dequeue());
+        }
+    }
+
+    private void fill() {
         if (head != tail) {
-            int h = head++ & mask;
-            Envelope handle = buffer[h];
-            buffer[h] = null;
-            return handle;
+            return;
         }
 
         long nextSequence = sequence.get() + 1L;
@@ -101,32 +124,15 @@ final class DisruptorMessageQueue implements MessageQueue, DisruptorMessageQueue
             }
         }
 
-        Envelope handle = ringBuffer.get(nextSequence++).handle;
         int t = tail;
-        while (nextSequence <= availableSequence) {
-            buffer[t++ & mask] = ringBuffer.get(nextSequence++).handle;
-        }
+        do {
+            buffer[t & mask] = ringBuffer.get(nextSequence).handle;
+            t++;
+            nextSequence++;
+        } while (nextSequence <= availableSequence);
 
         tail = t;
         sequence.set(availableSequence);
-        return handle;
-    }
-
-    @Override
-    public int numberOfMessages() {
-        return 0;
-    }
-
-    @Override
-    public boolean hasMessages() {
-        return head != tail || sequence.get() < sequenceBarrier.getCursor();
-    }
-
-    @Override
-    public void cleanUp(ActorRef owner, MessageQueue deadLetters) {
-        while (hasMessages()) {
-            deadLetters.enqueue(owner, dequeue());
-        }
     }
 
     private static final class ValueEvent {

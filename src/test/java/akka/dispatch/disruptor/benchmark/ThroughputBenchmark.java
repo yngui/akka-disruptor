@@ -24,12 +24,10 @@
 
 package akka.dispatch.disruptor.benchmark;
 
-import akka.actor.Actor;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.actor.Props;
 import akka.actor.UntypedActor;
-import akka.japi.Creator;
 import com.carrotsearch.junitbenchmarks.AbstractBenchmark;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
@@ -75,14 +73,14 @@ public class ThroughputBenchmark extends AbstractBenchmark {
         destinations = new ActorRef[numberOfClients];
         clients = new ActorRef[numberOfClients];
 
-        Props props = Props.create(new DestinationCreator()).withDispatcher(dispatcher1);
+        Props props = Props.create(Destination.class).withDispatcher(dispatcher1);
         long repeatsPerClient = repeats / numberOfClients;
 
         for (int i = 0; i < numberOfClients; i++) {
             ActorRef destination = system.actorOf(props);
             destinations[i] = destination;
-            clients[i] = system.actorOf(
-                    Props.create(new ClientCreator(destination, latch, repeatsPerClient)).withDispatcher(dispatcher2));
+            clients[i] = system.actorOf(Props.create(Client.class, destination, latch, repeatsPerClient)
+                    .withDispatcher(dispatcher2));
         }
     }
 
@@ -107,7 +105,7 @@ public class ThroughputBenchmark extends AbstractBenchmark {
         long repeats = 10000000L;
         Config config1 = ConfigFactory.load("disruptor.conf");
         Config config2 = ConfigFactory.load("bounded.conf");
-        Config config3 = ConfigFactory.load("default.conf");
+        Config config3 = ConfigFactory.load("unbounded.conf");
         return Arrays.asList(new Object[][]{
                 {1, repeats, config1, "dispatcher1", "dispatcher2"},
                 {2, repeats, config1, "dispatcher1", "dispatcher2"},
@@ -125,32 +123,6 @@ public class ThroughputBenchmark extends AbstractBenchmark {
                 {8, repeats, config3, "dispatcher", "dispatcher"},
                 {16, repeats, config3, "dispatcher", "dispatcher"}
         });
-    }
-
-    private static final class DestinationCreator implements Creator<Actor> {
-
-        @Override
-        public Actor create() throws Exception {
-            return new Destination();
-        }
-    }
-
-    private static final class ClientCreator implements Creator<Actor> {
-
-        private final ActorRef destination;
-        private final CountDownLatch latch;
-        private final long repeats;
-
-        ClientCreator(ActorRef destination, CountDownLatch latch, long repeats) {
-            this.destination = destination;
-            this.latch = latch;
-            this.repeats = repeats;
-        }
-
-        @Override
-        public Actor create() throws Exception {
-            return new Client(destination, latch, repeats);
-        }
     }
 
     private static final class Destination extends UntypedActor {
